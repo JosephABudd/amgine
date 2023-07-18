@@ -1,0 +1,6 @@
+id: 1bo8dlwlm597ob2bvs7tjxyrit31fegcljj1uonx92gnrvkd
+name: amgine
+main: api.zig
+license: MIT
+description: A numeric substitution cypher.
+dependencies:
