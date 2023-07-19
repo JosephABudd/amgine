@@ -7,10 +7,9 @@ const _decoder_ = @import("engine/decoder.zig");
 
 /// Amgine is a cypher tool.
 /// It substitutes one u8 for another when encrypting and does the reverse substitution when decrypting.
-/// The sender and receiver of Amgine encrypted data must have the secret.
+/// The encoder and decoder must have the same secret.
 pub const Amgine = struct {
     allocator: std.mem.Allocator,
-    secret: *_secret_.Secret,
     encoder: *_encoder_.Encoder,
     decoder: *_decoder_.Decoder,
 
@@ -23,7 +22,6 @@ pub const Amgine = struct {
     }
 
     pub fn deinit(self: *Amgine) void {
-        self.secret.deinit();
         self.encoder.deinit();
         self.decoder.deinit();
         self.allocator.destroy(self);
@@ -33,8 +31,9 @@ pub const Amgine = struct {
 pub fn init(allocator: std.mem.Allocator, secret: *_secret_.Secret) !*Amgine {
     // Create the encoder.
     const encoder = try _encoder_.init(allocator, secret);
-    // Create the decoder.
-    const decoder = try _decoder_.init(allocator, secret);
+    // Create the decoder. It needs a copy of the secret not the secret.
+    const copy_secret: *_secret_.Secret = try secret.copy();
+    const decoder = try _decoder_.init(allocator, copy_secret);
     errdefer encoder.deinit();
     // Create the wheel.
     const amgine = try allocator.create(Amgine);
@@ -42,7 +41,6 @@ pub fn init(allocator: std.mem.Allocator, secret: *_secret_.Secret) !*Amgine {
         encoder.deinit();
         decoder.deinit();
     }
-    amgine.secret = secret;
     amgine.allocator = allocator;
     amgine.encoder = encoder;
     amgine.decoder = decoder;

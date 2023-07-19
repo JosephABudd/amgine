@@ -9,7 +9,7 @@ pub const Encoder = struct {
 
     /// deinit removes the Encoder from memory.
     pub fn deinit(self: *Encoder) void {
-        // The amgine destroys the secret.
+        self.secret.deinit();
         self.allocator.destroy(self);
     }
 

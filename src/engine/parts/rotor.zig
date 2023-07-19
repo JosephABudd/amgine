@@ -61,6 +61,19 @@ pub const Rotor = struct {
         return initSerialRotor(self);
     }
 
+    pub fn copy(self: *Rotor) !*Rotor {
+        var rotor: *Rotor = try self.allocator.create(Rotor);
+        rotor.allocator = self.allocator;
+        rotor.noisey = self.noisey;
+        rotor.rotation_offset = self.rotation_offset;
+        rotor.rotation_distance = self.rotation_distance;
+        for (self.encodes, 0..) |v, i| {
+            rotor.encodes[i] = v;
+            rotor.decodes[v] = @as(u8, @intCast(i));
+        }
+        return rotor;
+    }
+
     /// isNoisey returns if the Rotor add/removes noise.
     pub fn isNoisey(self: *Rotor) bool {
         return self.noisey;

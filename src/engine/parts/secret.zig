@@ -51,6 +51,25 @@ pub const Secret = struct {
         return marshalled;
     }
 
+    pub fn copy(self: *Secret) !*Secret {
+        // Build the secret.
+        const secret = try self.allocator.create(Secret);
+        secret.allocator = self.allocator;
+        secret.prefix_length = self.prefix_length;
+        secret.rotor_index = 0;
+        for (self.rotors, 0..) |rotor, i| {
+            var copy_rotor: *_rotor_.Rotor = try rotor.copy();
+            errdefer {
+                var j: usize = 0;
+                while (j < i) : (j += 1) {
+                    secret.rotors[j].deinit();
+                }
+            }
+            secret.rotors[i] = copy_rotor;
+        }
+        return secret;
+    }
+
     /// serial returns a serial version of Secret.
     fn serial(self: *Secret) !*SerialSecret {
         const serial_secret: *SerialSecret = try self.allocator.create(SerialSecret);

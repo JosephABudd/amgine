@@ -9,7 +9,7 @@ pub const Decoder = struct {
 
     /// deinit removes the Decoder from memory.
     pub fn deinit(self: *Decoder) void {
-        // The amgine destroys the secret.
+        self.secret.deinit();
         self.allocator.destroy(self);
     }
 
