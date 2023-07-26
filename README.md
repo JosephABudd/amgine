@@ -1,5 +1,9 @@
 # amgine
 
+## July 26, 2023
+
+This library might be finished.
+
 ## July 18, 2023
 
 amgine is a poly numberic substituion cypher. ( Similar to the poly alphabetic substition cyphers children create in grade school for passing secret messages around. )

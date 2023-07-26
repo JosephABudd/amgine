@@ -44,8 +44,8 @@ test "initSerialRotor" {
 /// See functions rotate(..), encode(..) and decode(..).
 /// Rotor is added with .init() and removed with rotor.deinit().
 pub const Rotor = struct {
-    encodes: [256]u8, // example: encodes['a'] is the Rotor's encoding of 'a' which is 0x23.
-    decodes: [256]u8, // example: decodes[0x23] is 'a'.
+    encodes: [256]u8, // example: encodes['a'] is the Rotor's encoding of 'a' which is 0xff.
+    decodes: [256]u8, // example: decodes[0xff] is 'a'.
     rotation_offset: u8,
     rotation_distance: u8,
     allocator: std.mem.Allocator,
@@ -72,6 +72,19 @@ pub const Rotor = struct {
             rotor.decodes[v] = @as(u8, @intCast(i));
         }
         return rotor;
+    }
+
+    test "copy" {
+        const rotor1: *Rotor = try init(std.testing.allocator);
+        const rotor2: *Rotor = try rotor1.copy();
+        try std.testing.expect(rotor1.noisey == rotor2.noisey);
+        try std.testing.expect(rotor1.rotation_distance == rotor2.rotation_distance);
+        for (rotor1.encodes, 0..) |code, i| {
+            try std.testing.expect(code == rotor2.encodes[i]);
+        }
+        for (rotor1.decodes, 0..) |code, i| {
+            try std.testing.expect(code == rotor2.decodes[i]);
+        }
     }
 
     /// isNoisey returns if the Rotor add/removes noise.

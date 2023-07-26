@@ -1,10 +1,13 @@
 const std = @import("std");
-const _rotor_ = @import("rotor.zig");
+const mem = std.mem;
 const rand = std.crypto.random;
 const json = std.json;
+const _rotor_ = @import("rotor.zig");
+const max_rotors = 5;
 
 const SerialSecret = struct {
-    rotors: [5]*_rotor_.SerialRotor,
+    name: []u8,
+    rotors: [max_rotors]*_rotor_.SerialRotor,
     prefix_length: usize,
 
     fn marshal(
@@ -19,6 +22,7 @@ const SerialSecret = struct {
     }
 
     pub fn deinit(self: *SerialSecret, allocator: std.mem.Allocator) void {
+        allocator.free(self.name);
         for (self.rotors) |rotor| {
             rotor.deinit(allocator);
         }
@@ -30,9 +34,10 @@ const SerialSecret = struct {
 /// The same secret that is used to encode must be used to decode.
 /// Secret is added with .init() and removed with secret.deinit().
 pub const Secret = struct {
+    name: []u8,
     // rotors
     rotor_index: usize,
-    rotors: [5]*_rotor_.Rotor,
+    rotors: [max_rotors]*_rotor_.Rotor,
     prefix_length: usize,
     allocator: std.mem.Allocator,
 
@@ -41,6 +46,7 @@ pub const Secret = struct {
         for (self.rotors) |rotor| {
             rotor.deinit();
         }
+        self.allocator.free(self.name);
         self.allocator.destroy(self);
     }
 
@@ -64,10 +70,31 @@ pub const Secret = struct {
                 while (j < i) : (j += 1) {
                     secret.rotors[j].deinit();
                 }
+                secret.allocator.destroy(secret);
             }
             secret.rotors[i] = copy_rotor;
         }
+        secret.name = try self.allocator.alloc(u8, self.name.len);
+        @memcpy(secret.name, self.name);
         return secret;
+    }
+
+    test "copy" {
+        const secret1: *Secret = try init(std.testing.allocator, "secret1", 12);
+        const secret2: *Secret = try secret1.copy();
+        try std.testing.expect(secret1.prefix_length == secret2.prefix_length);
+        try std.testing.expect(secret1.name == secret2.name);
+        for (secret1.rotors, 0..) |rotor1, i| {
+            var rotor2: *_rotor_.Rotor = secret2.rotors[i];
+            try std.testing.expect(rotor1.rotation_distance == rotor2.rotation_distance);
+            try std.testing.expect(rotor1.noisey == rotor2.noisey);
+            for (rotor1.encodes, 0..) |encode, j| {
+                try std.testing.expect(encode == rotor2.encodes[j]);
+            }
+            for (rotor1.decodes, 0..) |decode, j| {
+                try std.testing.expect(decode == rotor2.decodes[j]);
+            }
+        }
     }
 
     /// serial returns a serial version of Secret.
@@ -84,6 +111,8 @@ pub const Secret = struct {
                 self.allocator.destroy(serial_secret);
             }
         }
+        serial_secret.name = try self.allocator.alloc(u8, self.name.len);
+        @memcpy(serial_secret.name, self.name);
         return serial_secret;
     }
 
@@ -95,6 +124,7 @@ pub const Secret = struct {
         defer serial_secret.deinit(std.testing.allocator);
 
         try std.testing.expect(secret.prefix_length == serial_secret.prefix_length);
+        try std.testing.expect(secret.name == serial_secret.name);
         var i: usize = 0;
         while (i < secret.rotor_index) : (i += 1) {
             var rotor_src: []u8 = &secret.rotors[i].encodes;
@@ -181,6 +211,41 @@ pub const Secret = struct {
         return self.rotors[self.rotor_index];
     }
 
+    /// currentRotors returns the current rotors in their correct order.
+    /// The caller must free the array of rotors.
+    pub fn currentRotors(self: *Secret, allocator: std.mem.Allocator) ![]*_rotor_.Rotor {
+        const sorted: []*_rotor_.Rotor = try allocator.alloc(*_rotor_.Rotor, self.rotors.len);
+        var index: usize = self.rotor_index;
+        var i: usize = 0;
+        while (i < sorted.len) : (i += 1) {
+            sorted[i] = self.rotors[index];
+            index += 1;
+            if (index == max_rotors) {
+                index = 0;
+            }
+        }
+        return sorted;
+    }
+
+    /// currentRotorsReverse returns the current rotors in their correct reversed order.
+    /// The caller must free the array of rotors.
+    pub fn currentRotorsReverse(self: *Secret, allocator: std.mem.Allocator) ![]*_rotor_.Rotor {
+        const sorted: []*_rotor_.Rotor = try allocator.alloc(*_rotor_.Rotor, self.rotors.len);
+        var index: usize = self.rotor_index;
+        var i: usize = sorted.len - 1;
+        while (i >= 0) : (i -= 1) {
+            sorted[i] = self.rotors[index];
+            index += 1;
+            if (index == max_rotors) {
+                index = 0;
+            }
+            if (i == 0) {
+                break;
+            }
+        }
+        return sorted;
+    }
+
     // prefixLength returns the length of the noise prefix.
     pub fn prefixLength(self: *Secret) usize {
         return self.prefix_length;
@@ -191,9 +256,11 @@ pub const Secret = struct {
 /// Returns a pointer to the Secret or the error.
 /// Secret must be removed from memory with Secret.deinit().
 /// Param prefix_length is the number of initial noise bytes.
-pub fn init(allocator: std.mem.Allocator, prefix_length: usize) !*Secret {
+pub fn init(allocator: std.mem.Allocator, name: []const u8, prefix_length: usize) !*Secret {
     // Build the secret.
     const secret = try allocator.create(Secret);
+    secret.name = try allocator.alloc(u8, name.len);
+    @memcpy(secret.name, name);
     secret.allocator = allocator;
     secret.prefix_length = prefix_length;
     secret.rotor_index = 0;
@@ -236,10 +303,12 @@ fn initFromSerial(allocator: std.mem.Allocator, serial_secret: *SerialSecret) !*
             allocator.destroy(secret);
         }
     }
+    secret.name = try allocator.alloc(u8, serial_secret.name.len);
+    @memcpy(secret.name, serial_secret.name);
     return secret;
 }
 
-pub fn unmarshal(allocator: std.mem.Allocator, marshalled: []u8) !*Secret {
+pub fn unmarshal(allocator: std.mem.Allocator, marshalled: []const u8) !*Secret {
     var parse_from_slice: json.Parsed(SerialSecret) = try std.json.parseFromSlice(SerialSecret, allocator, marshalled, .{});
     defer parse_from_slice.deinit();
     var serial_secret: SerialSecret = parse_from_slice.value;

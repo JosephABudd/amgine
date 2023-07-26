@@ -27,10 +27,7 @@ test "api" {
     // Decode the encoded text.
     var decoded = try enigma.decode(encoded);
     defer allocator.free(decoded);
-
-    // Display the results.
-    std.log.info("want: «{s}»", .{original_data});
-    std.log.info("got:  «{s}»", .{decoded});
+    try std.testing.expect(original_data == decoded);
 
     // Check marshalling.
     var marshalled: []u8 = try want_secret_part.marshal();
